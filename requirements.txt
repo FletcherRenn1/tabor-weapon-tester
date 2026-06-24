@@ -1,0 +1,7 @@
+PyQt6
+mss
+opencv-python
+pytesseract
+pyttsx3
+requests
+pyinstaller
