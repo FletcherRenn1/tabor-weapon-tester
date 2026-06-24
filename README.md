@@ -8,6 +8,10 @@ just download and run the .exe from releases. no installs needed.
 
 first run does a quick setup wizard. calibrate your screen region in Settings > Calibration once you have the game open.
 
+## notes
+
+site sync (community database upload) isn't implemented yet — enabling it won't do anything or may error. leave it off.
+
 ## running from source
 
 python 3.11+
