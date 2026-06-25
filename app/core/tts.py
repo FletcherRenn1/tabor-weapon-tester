@@ -51,7 +51,12 @@ class TTSEngine:
         if not self._config.tts_events.get(event, False):
             return
         if event == "recorded":
-            text = f"recorded, {kwargs.get('damage', 0)} percent"
+            damage = kwargs.get("damage", 0)
+            hp = kwargs.get("hp", 0)
+            if self._config.tts_events.get("recorded_hp", True) and hp:
+                text = f"{damage} percent, {hp} health points"
+            else:
+                text = f"recorded, {damage} percent"
         else:
             text = _PHRASES.get(event)
             if text is None:

@@ -28,6 +28,7 @@ def _default_config() -> dict:
             "ready": True,
             "shoot": True,
             "recorded": True,
+            "recorded_hp": True,
             "heal": True,
             "complete": True,
             "update": True,

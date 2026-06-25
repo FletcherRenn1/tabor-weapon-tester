@@ -261,6 +261,14 @@ class SettingsDialog(QDialog):
             cb.setChecked(tts_events.get(key, True))
             layout.addWidget(cb)
             self._tts_event_checks[key] = cb
+            if key == "recorded":
+                self._tts_recorded_hp = QCheckBox("  Include HP in shot announcement")
+                self._tts_recorded_hp.setStyleSheet("color: #aaa; padding-left: 12px;")
+                self._tts_recorded_hp.setChecked(tts_events.get("recorded_hp", True))
+                cb.toggled.connect(self._tts_recorded_hp.setEnabled)
+                self._tts_recorded_hp.setEnabled(cb.isChecked())
+                layout.addWidget(self._tts_recorded_hp)
+                self._tts_event_checks["recorded_hp"] = self._tts_recorded_hp
 
         layout.addStretch()
         save_btn = QPushButton("Save")

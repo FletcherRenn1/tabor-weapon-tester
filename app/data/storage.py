@@ -6,6 +6,8 @@ from pathlib import Path
 
 from app.data.config import Config
 
+HP_PER_PERCENT = 4
+
 
 def _sanitize(text: str) -> str:
     text = text.replace(" ", "_")
@@ -30,9 +32,10 @@ def _build_filename(weapon: str, caliber: str, mode: str) -> str:
 
 
 def _format_shot_line(number: int, value: int) -> str:
+    hp = value * HP_PER_PERCENT
     if number < 10:
-        return f"Shot {number}:  {value}%"
-    return f"Shot {number}: {value}%"
+        return f"Shot {number}:  {value}% ({hp} HP)"
+    return f"Shot {number}: {value}% ({hp} HP)"
 
 
 def _compute_stddev(shots: list[int], avg: float) -> float:
@@ -62,8 +65,13 @@ def save_result(
     for i, val in enumerate(shots, start=1):
         lines.append(_format_shot_line(i, val))
     lines.append("")
+    avg_hp = round(avg * HP_PER_PERCENT, 1)
+    min_hp = min_val * HP_PER_PERCENT
+    max_hp = max_val * HP_PER_PERCENT
+    stddev_hp = round(stddev * HP_PER_PERCENT, 1)
     lines.append(
-        f"Average: {avg}% | Min: {min_val}% | Max: {max_val}% | StdDev: {stddev}%"
+        f"Average: {avg}% ({avg_hp} HP) | Min: {min_val}% ({min_hp} HP)"
+        f" | Max: {max_val}% ({max_hp} HP) | StdDev: {stddev}% ({stddev_hp} HP)"
     )
     lines.append("")
 
@@ -106,7 +114,8 @@ def _parse_block(lines: list[str]) -> dict | None:
             shots.append(int(shot_match.group(2)))
             continue
         summary_match = re.match(
-            r"Average:\s+([\d.]+)%\s+\|\s+Min:\s+(\d+)%\s+\|\s+Max:\s+(\d+)%\s+\|\s+StdDev:\s+([\d.]+)%",
+            r"Average:\s+([\d.]+)%(?:\s+\([^)]*\))?\s+\|\s+Min:\s+(\d+)%(?:\s+\([^)]*\))?"
+            r"\s+\|\s+Max:\s+(\d+)%(?:\s+\([^)]*\))?\s+\|\s+StdDev:\s+([\d.]+)%",
             line,
         )
         if summary_match:

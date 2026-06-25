@@ -12,7 +12,7 @@ from app.core.capture import ScreenCapture, list_monitors
 from app.core.ocr import HealthReader
 from app.core.updater import Updater
 from app.core.sync import SyncClient
-from app.data.storage import save_result
+from app.data.storage import save_result, HP_PER_PERCENT
 from app.ui.settings import SettingsDialog
 from app.ui.results import ResultsBrowser
 from app.ui.simulator import SimulatorWindow
@@ -92,7 +92,7 @@ class MainWindow(QMainWindow):
         body_layout.addLayout(top_row)
         body_layout.addWidget(_sep())
 
-        self._status_label = QLabel("Ready")
+        self._status_label = QLabel("")
         self._status_label.setObjectName("status")
         body_layout.addWidget(self._status_label)
 
@@ -116,7 +116,7 @@ class MainWindow(QMainWindow):
         self._stack.setCurrentIndex(_PAGE_IDLE)
 
         self._update_profile_label()
-        self._check_monitor()
+        self._refresh_idle_status()
 
         if not config.permanent_optout_updates and config.updates_enabled:
             QTimer.singleShot(2000, self._check_updates)
@@ -178,10 +178,10 @@ class MainWindow(QMainWindow):
     def _go_idle(self):
         self._weapon_edit.clear()
         self._caliber_edit.clear()
-        self._status_label.setText("Ready")
         self._health_label.setText("")
         self._shots_label.setText("")
         self._stack.setCurrentIndex(_PAGE_IDLE)
+        self._refresh_idle_status()
 
     def _go_armed(self):
         if not self._config.active_profile and not self._config.mock_mode:
@@ -195,18 +195,36 @@ class MainWindow(QMainWindow):
         name = self._config.active_profile or "(no profile)"
         self._profile_label.setText(f"Profile: {name}")
 
-    def _check_monitor(self):
-        profile = self._config.active_profile
-        if not profile:
+    def _refresh_idle_status(self):
+        if self._config.mock_mode:
+            self._status_label.setText("Status: OK")
+            self._ready_btn.setEnabled(True)
             return
-        prof_data = self._config.calibration_profiles.get(profile)
-        if not prof_data:
-            return
-        monitors = list_monitors()
-        found = any(m["index"] == prof_data["monitor_index"] for m in monitors)
-        if not found:
-            self._status_label.setText("Monitor not found — recalibrate in Settings")
+
+        profile_name = self._config.active_profile
+        if not profile_name:
+            profiles = self._config.calibration_profiles
+            if not profiles:
+                self._status_label.setText("Status: Not OK:no calibration profiles (Settings > Calibration)")
+            else:
+                self._status_label.setText("Status: Not OK:no active profile selected (Settings > Calibration)")
             self._ready_btn.setEnabled(False)
+            return
+
+        prof_data = self._config.calibration_profiles.get(profile_name)
+        if not prof_data:
+            self._status_label.setText("Status: Not OK:active profile data missing, recalibrate")
+            self._ready_btn.setEnabled(False)
+            return
+
+        monitors = list_monitors()
+        if not any(m["index"] == prof_data["monitor_index"] for m in monitors):
+            self._status_label.setText("Status: Not OK:monitor not found, recalibrate in Settings")
+            self._ready_btn.setEnabled(False)
+            return
+
+        self._status_label.setText("Status: OK")
+        self._ready_btn.setEnabled(True)
 
     def _build_provider(self):
         if self._config.mock_mode:
@@ -288,12 +306,14 @@ class MainWindow(QMainWindow):
 
     @pyqtSlot(int, int)
     def _on_shot_recorded(self, shot_num: int, damage: int):
-        self._shots_label.setText(f"Shots: {shot_num} / 10")
-        self._tts.speak_event("recorded", damage=damage)
+        hp = damage * HP_PER_PERCENT
+        self._shots_label.setText(f"Shots: {shot_num} / 10:last: {damage}% ({hp} HP)")
+        self._tts.speak_event("recorded", damage=damage, hp=hp)
 
     @pyqtSlot(int)
     def _on_health_updated(self, health: int):
-        self._health_label.setText(f"Health: {health}%")
+        hp = health * HP_PER_PERCENT
+        self._health_label.setText(f"Health: {health}% ({hp} HP)")
 
     @pyqtSlot(dict)
     def _on_complete(self, results: dict):
@@ -303,9 +323,16 @@ class MainWindow(QMainWindow):
         max_val = results["max_val"]
         stddev = results["stddev"]
 
-        lines = [f"Average: {avg:.1f}%  Min: {min_val}%  Max: {max_val}%  StdDev: {stddev:.1f}%", ""]
+        avg_hp = round(avg * HP_PER_PERCENT, 1)
+        lines = [
+            f"Average: {avg:.1f}% ({avg_hp} HP)"
+            f"  Min: {min_val}% ({min_val * HP_PER_PERCENT} HP)"
+            f"  Max: {max_val}% ({max_val * HP_PER_PERCENT} HP)"
+            f"  StdDev: {stddev:.1f}% ({round(stddev * HP_PER_PERCENT, 1)} HP)",
+            "",
+        ]
         for i, dmg in enumerate(shots, 1):
-            lines.append(f"Shot {i}: {dmg}%")
+            lines.append(f"Shot {i}: {dmg}% ({dmg * HP_PER_PERCENT} HP)")
 
         reply = QMessageBox.question(
             self, "Test complete",
@@ -333,7 +360,7 @@ class MainWindow(QMainWindow):
     def _check_updates(self):
         result = Updater(self._version, self._config).check()
         if result:
-            self._banner.setText(f"Update available: v{result['version']}  —  click here")
+            self._banner.setText(f"Update available: v{result['version']}:click here")
             self._banner.show()
             self._tts.speak_event("update")
 
@@ -353,6 +380,7 @@ class MainWindow(QMainWindow):
 
     def _on_settings_changed(self):
         self._update_profile_label()
+        self._refresh_idle_status()
 
     def _open_simulator(self):
         if not self._config.mock_mode:

@@ -21,7 +21,15 @@ pip install -r requirements.txt
 python main.py
 ```
 
-build standalone exe:
+## build standalone exe
+
+requires [Tesseract for Windows](https://github.com/UB-Mannheim/tesseract/wiki). install it, then copy the files into the repo before building:
+```
+New-Item -ItemType Directory -Force -Path "assets\tesseract\tessdata"
+Copy-Item "C:\Program Files\Tesseract-OCR\tesseract.exe" "assets\tesseract\"
+Copy-Item "C:\Program Files\Tesseract-OCR\*.dll" "assets\tesseract\"
+Copy-Item "C:\Program Files\Tesseract-OCR\tessdata\eng.traineddata" "assets\tesseract\tessdata\"
+```
 ```
 python -m PyInstaller build.spec --noconfirm
 ```

@@ -4,7 +4,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt
 
-from app.data.storage import load_all_results
+from app.data.storage import load_all_results, HP_PER_PERCENT
 from app.data.config import Config
 
 
@@ -101,7 +101,13 @@ class ResultsBrowser(QWidget):
         lines = [f"[{weapon}] [{caliber}] - {date}", ""]
         for i, dmg in enumerate(shots, 1):
             pad = " " if i == 10 else "  "
-            lines.append(f"Shot {i}:{pad}{dmg}%")
+            lines.append(f"Shot {i}:{pad}{dmg}% ({dmg * HP_PER_PERCENT} HP)")
         lines.append("")
-        lines.append(f"Average: {avg:.1f}% | Min: {min_val}% | Max: {max_val}% | StdDev: {stddev:.1f}%")
+        avg_hp = round(avg * HP_PER_PERCENT, 1)
+        lines.append(
+            f"Average: {avg:.1f}% ({avg_hp} HP)"
+            f" | Min: {min_val}% ({min_val * HP_PER_PERCENT} HP)"
+            f" | Max: {max_val}% ({max_val * HP_PER_PERCENT} HP)"
+            f" | StdDev: {stddev:.1f}% ({round(stddev * HP_PER_PERCENT, 1)} HP)"
+        )
         self._detail.setPlainText("\n".join(lines))

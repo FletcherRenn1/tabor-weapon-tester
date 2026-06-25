@@ -14,7 +14,6 @@ a = Analysis(
         ],
     ],
     datas=[
-        ('assets/fonts/AlteinxSans.otf', 'assets/fonts'),
         ('assets/tesseract/tessdata/eng.traineddata', 'assets/tesseract/tessdata'),
         ('assets/ui/check.svg', 'assets/ui'),
         ('VERSION', '.'),
