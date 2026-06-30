@@ -10,7 +10,7 @@ first run does a quick setup wizard. calibrate your screen region in Settings > 
 
 ## notes
 
-site sync (community database upload) isn't implemented yet, enabling it won't do anything or may error. leave it off.
+site sync uploads completed tests (damage and armor) to a community database if you opt in. off by default. the username field is just a free-text label, not an account, so it's anonymous unless you put something identifying in it.
 
 to re-run the setup wizard (e.g. to change the permanent opt-in/opt-out selection for updates or site sync), delete the config file and relaunch:
 
@@ -22,7 +22,7 @@ deleting this file resets all settings. recalibrate your screen region afterward
 
 ## armor testing
 
-armor test on the main screen. pick caliber, grade, base damage, start shooting. classifies hits as pen or blunt, tracks pen chance via wilson confidence interval. can suspend and resume. results in the results window.
+armor test on the main screen. pick caliber, grade, base damage, start shooting. classifies pen/blunt, tracks pen chance with a wilson confidence interval. runs until that's within ±5% at 90% confidence, so treat the result as an estimate, not an exact number. suspend/resume supported.
 
 ## running from source
 
