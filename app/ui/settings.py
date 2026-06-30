@@ -5,7 +5,7 @@ from PyQt6.QtWidgets import (
     QDialog, QTabWidget, QWidget, QLabel, QVBoxLayout, QHBoxLayout,
     QPushButton, QLineEdit, QCheckBox, QSlider, QComboBox, QListWidget,
     QListWidgetItem, QFileDialog, QMessageBox, QSpinBox, QRadioButton,
-    QButtonGroup, QFrame, QStackedWidget,
+    QButtonGroup, QFrame, QStackedWidget, QScrollArea,
 )
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 
@@ -80,6 +80,7 @@ class SettingsDialog(QDialog):
             self._build_updates()
         if not config.permanent_optout_sync:
             self._build_sync()
+        self._build_test_defaults()
         self._build_dev()
 
         self._tabs.currentChanged.connect(self._on_tab_changed)
@@ -216,9 +217,19 @@ class SettingsDialog(QDialog):
         self.settings_changed.emit()
 
     def _build_tts(self):
-        tab = QWidget()
-        layout = QVBoxLayout(tab)
-        layout.setSpacing(8)
+        outer = QWidget()
+        outer_layout = QVBoxLayout(outer)
+        outer_layout.setContentsMargins(0, 0, 0, 4)
+        outer_layout.setSpacing(4)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+
+        content = QWidget()
+        layout = QVBoxLayout(content)
+        layout.setSpacing(10)
+        layout.setContentsMargins(8, 8, 8, 8)
 
         self._tts_enabled = QCheckBox("Enable TTS")
         self._tts_enabled.setChecked(self._config.tts_enabled)
@@ -253,6 +264,9 @@ class SettingsDialog(QDialog):
             "heal": "Heal warning",
             "complete": "Test complete",
             "update": "Update available",
+            "shot_classified": "Armor: shot classified (pen/blunt)",
+            "ci_update": "Armor: CI update (every 25 shots)",
+            "shots_estimate": "Armor: shots to completion estimate (every 15 shots)",
         }
         self._tts_event_checks = {}
         tts_events = self._config.tts_events
@@ -271,11 +285,14 @@ class SettingsDialog(QDialog):
                 self._tts_event_checks["recorded_hp"] = self._tts_recorded_hp
 
         layout.addStretch()
+        scroll.setWidget(content)
+        outer_layout.addWidget(scroll)
+
         save_btn = QPushButton("Save")
         save_btn.clicked.connect(self._save_tts)
-        layout.addWidget(save_btn, alignment=Qt.AlignmentFlag.AlignRight)
+        outer_layout.addWidget(save_btn, alignment=Qt.AlignmentFlag.AlignRight)
 
-        self._tabs.addTab(tab, "TTS")
+        self._tabs.addTab(outer, "TTS")
 
     def _save_tts(self):
         self._config.tts_enabled = self._tts_enabled.isChecked()
@@ -336,6 +353,47 @@ class SettingsDialog(QDialog):
         self._config.sync_enabled = self._sync_enabled.isChecked()
         self._config.sync_username = self._sync_username.text().strip()
         self._config.sync_opted_in = True
+        self._config.save()
+        self.settings_changed.emit()
+        self._show_saved()
+
+    def _build_test_defaults(self):
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        layout.setSpacing(10)
+
+        layout.addWidget(QLabel("Armor test defaults:"))
+        layout.addWidget(_sep())
+
+        thresh_row = QHBoxLayout()
+        thresh_row.addWidget(QLabel("Default classification threshold (% of base damage):"))
+        self._armor_thresh_spin = QSpinBox()
+        self._armor_thresh_spin.setRange(1, 99)
+        self._armor_thresh_spin.setValue(self._config.armor_default_threshold_pct)
+        self._armor_thresh_spin.setSuffix("%")
+        thresh_row.addWidget(self._armor_thresh_spin)
+        thresh_row.addStretch()
+        layout.addLayout(thresh_row)
+
+        layout.addWidget(QLabel("Default base damage input mode:"))
+        self._armor_mode_combo = QComboBox()
+        self._armor_mode_combo.addItem("Use last matching damage test", "last_test")
+        self._armor_mode_combo.addItem("Enter manually", "manual")
+        current_mode = self._config.armor_base_damage_mode
+        idx = 0 if current_mode == "last_test" else 1
+        self._armor_mode_combo.setCurrentIndex(idx)
+        layout.addWidget(self._armor_mode_combo)
+
+        layout.addStretch()
+        save_btn = QPushButton("Save")
+        save_btn.clicked.connect(self._save_test_defaults)
+        layout.addWidget(save_btn, alignment=Qt.AlignmentFlag.AlignRight)
+
+        self._tabs.addTab(tab, "Test defaults")
+
+    def _save_test_defaults(self):
+        self._config.armor_default_threshold_pct = self._armor_thresh_spin.value()
+        self._config.armor_base_damage_mode = self._armor_mode_combo.currentData()
         self._config.save()
         self.settings_changed.emit()
         self._show_saved()

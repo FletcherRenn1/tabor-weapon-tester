@@ -32,6 +32,9 @@ def _default_config() -> dict:
             "heal": True,
             "complete": True,
             "update": True,
+            "shot_classified": True,
+            "ci_update": True,
+            "shots_estimate": True,
         },
         "updates_enabled": False,
         "updates_opted_in": False,
@@ -40,8 +43,11 @@ def _default_config() -> dict:
         "sync_opted_in": False,
         "permanent_optout_sync": False,
         "sync_username": "",
-        "sync_endpoint": "",
+        "sync_endpoint": "https://data.tabormap.com",
+        "sync_api_key": "",
         "mock_mode": False,
+        "armor_default_threshold_pct": 15,
+        "armor_base_damage_mode": "manual",
     }
 
 

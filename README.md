@@ -10,7 +10,19 @@ first run does a quick setup wizard. calibrate your screen region in Settings > 
 
 ## notes
 
-site sync (community database upload) isn't implemented yet — enabling it won't do anything or may error. leave it off.
+site sync (community database upload) isn't implemented yet, enabling it won't do anything or may error. leave it off.
+
+to re-run the setup wizard (e.g. to change the permanent opt-in/opt-out selection for updates or site sync), delete the config file and relaunch:
+
+```
+%APPDATA%\tabor-weapon-tester\config.json
+```
+
+deleting this file resets all settings. recalibrate your screen region afterwards.
+
+## armor testing
+
+armor test on the main screen. pick caliber, grade, base damage, start shooting. classifies hits as pen or blunt, tracks pen chance via wilson confidence interval. can suspend and resume. results in the results window.
 
 ## running from source
 

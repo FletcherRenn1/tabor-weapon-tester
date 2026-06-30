@@ -148,7 +148,7 @@ class UpdatesPage(QWizardPage):
         layout.addWidget(_h1("Auto-updates"))
         layout.addWidget(_body(
             "The app can check GitHub for new versions on launch. "
-            "This is off by default — you can enable it any time in Settings > Updates."
+            "This is off by default - you can enable it any time in Settings > Updates."
         ))
 
         layout.addWidget(_sep())
@@ -182,7 +182,7 @@ class SyncPage(QWizardPage):
         layout.addWidget(_h1("Community database"))
         layout.addWidget(_body(
             "Completed tests can be uploaded to the community database so others can see your results. "
-            "This is off by default — you can enable it any time in Settings > Site sync."
+            "This is off by default - you can enable it any time in Settings > Site sync."
         ))
 
         layout.addWidget(_sep())

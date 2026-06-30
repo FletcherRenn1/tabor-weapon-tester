@@ -157,11 +157,9 @@ class Session(QObject):
 
         avg_damage = sum(self._shots) / len(self._shots)
         if (health_after - avg_damage) <= self._config.safety_buffer:
-            # Health too low for another shot — ask to heal
             self._stabilize_value = None
             self._set_state(State.HEAL_WARNING)
         else:
-            # Jump straight back to ready at current health, no heal required
             self._enter_ready(health_after)
 
     def _build_results(self) -> dict:

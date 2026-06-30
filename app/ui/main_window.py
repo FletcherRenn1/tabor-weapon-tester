@@ -6,16 +6,18 @@ from PyQt6.QtCore import Qt, QTimer, pyqtSlot
 
 from app.data.config import Config
 from app.core.session import Session, State
+from app.core.armor_session import ArmorSession, ArmorState
 from app.core.tts import TTSEngine
 from app.core.mock import MockHealthProvider
 from app.core.capture import ScreenCapture, list_monitors
 from app.core.ocr import HealthReader
 from app.core.updater import Updater
 from app.core.sync import SyncClient
-from app.data.storage import save_result, HP_PER_PERCENT
+from app.data.storage import save_result, save_armor_result, HP_PER_PERCENT
 from app.ui.settings import SettingsDialog
-from app.ui.results import ResultsBrowser
+from app.ui.results_browser import ResultsBrowserWindow
 from app.ui.simulator import SimulatorWindow
+from app.ui.armor_test import ArmorSetupWidget, ArmorTestWidget
 
 
 STYLESHEET = """
@@ -32,9 +34,11 @@ QLabel#sub { color: #888; font-size: 13px; }
 QFrame#sep { color: #222; }
 """
 
-_PAGE_IDLE    = 0
-_PAGE_ARMED   = 1
-_PAGE_TESTING = 2
+_PAGE_IDLE       = 0
+_PAGE_ARMED      = 1
+_PAGE_TESTING    = 2
+_PAGE_ARMOR_SETUP = 3
+_PAGE_ARMOR_TEST  = 4
 
 
 def _sep():
@@ -49,12 +53,15 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("Tabor Weapon Tester")
         self.setStyleSheet(STYLESHEET)
-        self.setMinimumSize(500, 420)
+        self.setMinimumSize(900, 640)
+        self.resize(1060, 760)
         self._config = config
         self._version = version
         self._session: Session | None = None
+        self._armor_session: ArmorSession | None = None
         self._mock_provider: MockHealthProvider | None = None
         self._sim_window: SimulatorWindow | None = None
+        self._results_window: ResultsBrowserWindow | None = None
         self._tts = TTSEngine(config)
         self._settings_dlg: SettingsDialog | None = None
 
@@ -113,6 +120,19 @@ class MainWindow(QMainWindow):
         self._stack.addWidget(self._build_idle_page())
         self._stack.addWidget(self._build_armed_page())
         self._stack.addWidget(self._build_testing_page())
+
+        self._armor_setup_widget = ArmorSetupWidget(config)
+        self._armor_setup_widget.start_test.connect(self._start_armor)
+        self._armor_setup_widget.resume_test.connect(self._resume_armor)
+        self._armor_setup_widget.back.connect(self._go_idle)
+        self._stack.addWidget(self._armor_setup_widget)
+
+        self._armor_test_widget = ArmorTestWidget(self._tts, config)
+        self._armor_test_widget.cancel_requested.connect(self._cancel_armor)
+        self._armor_test_widget.suspend_requested.connect(self._suspend_armor)
+        self._armor_test_widget.finalise_requested.connect(self._finalise_armor)
+        self._stack.addWidget(self._armor_test_widget)
+
         self._stack.setCurrentIndex(_PAGE_IDLE)
 
         self._update_profile_label()
@@ -126,9 +146,12 @@ class MainWindow(QMainWindow):
         layout = QVBoxLayout(page)
         layout.setContentsMargins(0, 10, 0, 0)
         layout.setSpacing(8)
-        self._ready_btn = QPushButton("Ready for test")
+        self._ready_btn = QPushButton("Damage test")
         self._ready_btn.clicked.connect(self._go_armed)
         layout.addWidget(self._ready_btn)
+        self._armor_btn = QPushButton("Armor test")
+        self._armor_btn.clicked.connect(self._go_armor_setup)
+        layout.addWidget(self._armor_btn)
         return page
 
     def _build_armed_page(self) -> QWidget:
@@ -180,6 +203,7 @@ class MainWindow(QMainWindow):
         self._caliber_edit.clear()
         self._health_label.setText("")
         self._shots_label.setText("")
+        self._status_label.setText("")
         self._stack.setCurrentIndex(_PAGE_IDLE)
         self._refresh_idle_status()
 
@@ -191,40 +215,55 @@ class MainWindow(QMainWindow):
         self._stack.setCurrentIndex(_PAGE_ARMED)
         self._weapon_edit.setFocus()
 
+    def _go_armor_setup(self):
+        if not self._config.active_profile and not self._config.mock_mode:
+            QMessageBox.warning(self, "No calibration", "Set up a calibration profile in Settings first.")
+            return
+        self._armor_setup_widget.refresh()
+        self._status_label.setText("Armor test setup")
+        self._health_label.setText("")
+        self._shots_label.setText("")
+        self._stack.setCurrentIndex(_PAGE_ARMOR_SETUP)
+
     def _update_profile_label(self):
         name = self._config.active_profile or "(no profile)"
         self._profile_label.setText(f"Profile: {name}")
 
     def _refresh_idle_status(self):
         if self._config.mock_mode:
-            self._status_label.setText("Status: OK")
+            self._status_label.setText("Status: OK (mock mode)")
             self._ready_btn.setEnabled(True)
+            self._armor_btn.setEnabled(True)
             return
 
         profile_name = self._config.active_profile
         if not profile_name:
             profiles = self._config.calibration_profiles
             if not profiles:
-                self._status_label.setText("Status: Not OK:no calibration profiles (Settings > Calibration)")
+                self._status_label.setText("Status: Not OK - no calibration profiles (Settings > Calibration)")
             else:
-                self._status_label.setText("Status: Not OK:no active profile selected (Settings > Calibration)")
+                self._status_label.setText("Status: Not OK - no active profile selected (Settings > Calibration)")
             self._ready_btn.setEnabled(False)
+            self._armor_btn.setEnabled(False)
             return
 
         prof_data = self._config.calibration_profiles.get(profile_name)
         if not prof_data:
-            self._status_label.setText("Status: Not OK:active profile data missing, recalibrate")
+            self._status_label.setText("Status: Not OK - active profile data missing, recalibrate")
             self._ready_btn.setEnabled(False)
+            self._armor_btn.setEnabled(False)
             return
 
         monitors = list_monitors()
         if not any(m["index"] == prof_data["monitor_index"] for m in monitors):
-            self._status_label.setText("Status: Not OK:monitor not found, recalibrate in Settings")
+            self._status_label.setText("Status: Not OK - monitor not found, recalibrate in Settings")
             self._ready_btn.setEnabled(False)
+            self._armor_btn.setEnabled(False)
             return
 
         self._status_label.setText("Status: OK")
         self._ready_btn.setEnabled(True)
+        self._armor_btn.setEnabled(True)
 
     def _build_provider(self):
         if self._config.mock_mode:
@@ -257,6 +296,10 @@ class MainWindow(QMainWindow):
         self._session.health_updated.connect(self._on_health_updated)
         self._session.test_complete.connect(self._on_complete)
 
+        if self._sim_window and self._sim_window.isVisible():
+            self._sim_window.set_damage_session(self._session)
+            self._sim_window.set_armor_session(None)
+
         self._shots_label.setText("Shots: 0 / 10")
         self._stack.setCurrentIndex(_PAGE_TESTING)
         self._session.start(weapon, caliber)
@@ -287,12 +330,12 @@ class MainWindow(QMainWindow):
     @pyqtSlot(str)
     def _on_state_changed(self, state_name: str):
         messages = {
-            "WAITING_FOR_FULL_HEALTH": "Waiting — heal to 100%",
+            "WAITING_FOR_FULL_HEALTH": "Waiting - heal to 100%",
             "READY_TO_SHOOT": "Shoot now",
             "WAITING_FOR_HIT": "Tracking hit...",
             "RECORDING_VALUE": "Recording...",
             "HEAL_WARNING": "Heal up before next shot",
-            "PAUSED": "Paused — heal to 100% to resume",
+            "PAUSED": "Paused - heal to 100% to resume",
             "COMPLETE": "Test complete",
         }
         self._status_label.setText(messages.get(state_name, state_name))
@@ -307,7 +350,7 @@ class MainWindow(QMainWindow):
     @pyqtSlot(int, int)
     def _on_shot_recorded(self, shot_num: int, damage: int):
         hp = damage * HP_PER_PERCENT
-        self._shots_label.setText(f"Shots: {shot_num} / 10:last: {damage}% ({hp} HP)")
+        self._shots_label.setText(f"Shots: {shot_num} / 10 - last: {damage}% ({hp} HP)")
         self._tts.speak_event("recorded", damage=damage, hp=hp)
 
     @pyqtSlot(int)
@@ -342,6 +385,8 @@ class MainWindow(QMainWindow):
         if reply == QMessageBox.StandardButton.Yes:
             path = save_result(results["weapon"], results["caliber"], shots, avg, min_val, max_val, stddev)
             QMessageBox.information(self, "Saved", f"Saved to:\n{path}")
+            if self._results_window and self._results_window.isVisible():
+                self._results_window.refresh()
 
         if not self._config.permanent_optout_sync and self._config.sync_enabled:
             sync_reply = QMessageBox.question(
@@ -357,10 +402,105 @@ class MainWindow(QMainWindow):
         self._pause_btn.setText("Pause")
         self._go_idle()
 
+    def _start_armor(self, setup: dict):
+        provider = self._build_provider()
+        if provider is None:
+            QMessageBox.warning(self, "No provider", "Could not create health reader. Check calibration.")
+            return
+
+        self._armor_session = ArmorSession(provider, self._config, self._version)
+        self._armor_test_widget.reset()
+        self._armor_test_widget.attach_session(self._armor_session)
+
+        if self._sim_window and self._sim_window.isVisible():
+            self._sim_window.set_damage_session(None)
+            self._sim_window.set_armor_session(self._armor_session)
+
+        self._status_label.setText("Armor test")
+        self._health_label.setText("")
+        self._shots_label.setText("")
+        self._stack.setCurrentIndex(_PAGE_ARMOR_TEST)
+
+        self._armor_session.start(
+            caliber=setup["caliber"],
+            grade=setup["grade"],
+            base_damage=setup["base_damage"],
+            threshold=setup["threshold"],
+            weapon_ref=setup.get("weapon_ref", ""),
+            base_damage_source=setup.get("base_damage_source", "manual"),
+        )
+        self._armor_test_widget.sync_session_data()
+
+    def _resume_armor(self, data: dict):
+        provider = self._build_provider()
+        if provider is None:
+            QMessageBox.warning(self, "No provider", "Could not create health reader. Check calibration.")
+            return
+
+        self._armor_session = ArmorSession(provider, self._config, self._version)
+        self._armor_test_widget.reset()
+        self._armor_test_widget.attach_session(self._armor_session)
+
+        if self._sim_window and self._sim_window.isVisible():
+            self._sim_window.set_damage_session(None)
+            self._sim_window.set_armor_session(self._armor_session)
+
+        self._status_label.setText("Armor test (resumed)")
+        self._health_label.setText("")
+        self._shots_label.setText("")
+        self._stack.setCurrentIndex(_PAGE_ARMOR_TEST)
+        self._armor_session.load_suspended(data)
+        self._armor_test_widget.sync_session_data()
+
+    def _suspend_armor(self):
+        if self._armor_session is None:
+            return
+        self._armor_session.suspend()
+        self._armor_test_widget.detach_session()
+        self._armor_session = None
+        if self._sim_window and self._sim_window.isVisible():
+            self._sim_window.set_armor_session(None)
+        self._go_idle()
+
+    def _cancel_armor(self):
+        if self._armor_session:
+            self._armor_session.cancel()
+            self._armor_session = None
+        self._armor_test_widget.detach_session()
+        if self._sim_window and self._sim_window.isVisible():
+            self._sim_window.set_armor_session(None)
+        self._go_idle()
+
+    def _finalise_armor(self):
+        if self._armor_session is None:
+            return
+        result = self._armor_session.get_result()
+        path = save_armor_result(result)
+        self._armor_session.finalise()
+        self._armor_test_widget.detach_session()
+        self._armor_session = None
+        if self._sim_window and self._sim_window.isVisible():
+            self._sim_window.set_armor_session(None)
+        QMessageBox.information(self, "Saved", f"Armor test saved to:\n{path}")
+        if self._results_window and self._results_window.isVisible():
+            self._results_window.refresh()
+
+        if not self._config.permanent_optout_sync and self._config.sync_enabled:
+            sync_reply = QMessageBox.question(
+                self, "Upload results", "Upload to community database?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            )
+            if sync_reply == QMessageBox.StandardButton.Yes:
+                ok = SyncClient(self._config, self._version).submit_armor(result)
+                if not ok:
+                    QMessageBox.warning(self, "Upload failed", "Could not upload results.")
+
+        self._go_idle()
+
     def _check_updates(self):
         result = Updater(self._version, self._config).check()
         if result:
-            self._banner.setText(f"Update available: v{result['version']}:click here")
+            self._banner.setText(f"Update available: v{result['version']} - click here")
             self._banner.show()
             self._tts.speak_event("update")
 
@@ -388,15 +528,28 @@ class MainWindow(QMainWindow):
         if self._mock_provider is None:
             self._mock_provider = MockHealthProvider()
         if self._sim_window is None or not self._sim_window.isVisible():
-            self._sim_window = SimulatorWindow(self._mock_provider, self._session)
+            self._sim_window = SimulatorWindow(self._mock_provider)
             self._sim_window.show()
         else:
             self._sim_window.raise_()
+        self._sim_window.set_damage_session(self._session)
+        self._sim_window.set_armor_session(self._armor_session)
 
     def _open_results(self):
-        dlg = QMainWindow(self)
-        dlg.setWindowTitle("Results browser")
-        dlg.setStyleSheet(STYLESHEET)
-        dlg.setMinimumSize(800, 500)
-        dlg.setCentralWidget(ResultsBrowser(self._config))
-        dlg.show()
+        if self._results_window is None or not self._results_window.isVisible():
+            self._results_window = ResultsBrowserWindow(self._config, self._version)
+            self._results_window.resume_requested.connect(self._on_results_resume)
+            self._results_window.show()
+        else:
+            self._results_window.raise_()
+            self._results_window.refresh()
+
+    def _on_results_resume(self, data: dict):
+        if self._armor_session is not None:
+            QMessageBox.warning(
+                self, "Armor test active",
+                "An armor test is already running. Cancel or finalise it before resuming another.",
+            )
+            return
+        self._go_armor_setup()
+        self._resume_armor(data)

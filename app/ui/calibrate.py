@@ -62,7 +62,7 @@ class MonitorPicker(QDialog):
                 thumb_label.setText(f"{m['width']}x{m['height']}")
 
             card_layout.addWidget(thumb_label)
-            btn = QPushButton(f"Monitor {m['index'] + 1}  —  {m['width']}x{m['height']}")
+            btn = QPushButton(f"Monitor {m['index'] + 1}  -  {m['width']}x{m['height']}")
             btn.clicked.connect(lambda checked, info=m: self._pick(info))
             card_layout.addWidget(btn)
             row.addWidget(card)

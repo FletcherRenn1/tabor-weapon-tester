@@ -1,4 +1,5 @@
 import queue
+import re
 import threading
 
 from app.data.config import Config
@@ -13,8 +14,6 @@ _PHRASES = {
 
 
 def _make_engine():
-    # Bypass pyttsx3's per-thread cache to get a completely fresh engine each call.
-    # Reusing the same engine across runAndWait() calls causes SAPI5 to hang on Windows.
     from pyttsx3 import engine as _e
     return _e.Engine(None, False)
 
@@ -50,6 +49,9 @@ class TTSEngine:
             return
         if not self._config.tts_events.get(event, False):
             return
+
+        text: str | None = None
+
         if event == "recorded":
             damage = kwargs.get("damage", 0)
             hp = kwargs.get("hp", 0)
@@ -57,10 +59,30 @@ class TTSEngine:
                 text = f"{damage} percent, {hp} health points"
             else:
                 text = f"recorded, {damage} percent"
+
+        elif event == "shot_classified":
+            text = kwargs.get("classification", "")
+
+        elif event == "ci_update":
+            margin = kwargs.get("margin", 0)
+            text = f"CI margin now {margin} percent"
+
+        elif event == "shots_estimate":
+            estimate = kwargs.get("estimate", "")
+            if not estimate or estimate in ("almost done", "estimating..."):
+                return
+            m = re.match(r"~(\d+)[^\d]+(\d+)", estimate)
+            if m:
+                mid = (int(m.group(1)) + int(m.group(2))) // 2
+                text = f"approximately {mid} more shots needed"
+            else:
+                return
+
         else:
             text = _PHRASES.get(event)
-            if text is None:
-                return
+
+        if not text:
+            return
         self.speak(text)
 
     def get_available_voices(self) -> list[dict]:

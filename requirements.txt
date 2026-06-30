@@ -4,4 +4,5 @@ opencv-python
 pytesseract
 pyttsx3
 requests
+pyqtgraph
 pyinstaller
