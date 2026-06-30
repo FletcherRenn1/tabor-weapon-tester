@@ -4,6 +4,10 @@ desktop tool for testing weapon damage in ghosts of tabor. reads chest health fr
 
 browse community-submitted results at [data.tabormap.com](https://data.tabormap.com).
 
+## pcvr only
+
+needs the streamer cam to read chest health, which doesn't exist on standalone. pcvr (and the desktop client itself) only.
+
 ## usage
 
 just download and run the .exe from releases. no installs needed.
