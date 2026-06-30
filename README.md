@@ -2,6 +2,8 @@
 
 desktop tool for testing weapon damage in ghosts of tabor. reads chest health from streamer cam via OCR, walks you through a 10-shot test, gives you avg/min/max/stddev.
 
+browse community-submitted results at [data.tabormap.com](https://data.tabormap.com).
+
 ## usage
 
 just download and run the .exe from releases. no installs needed.
